@@ -2,11 +2,17 @@
 
 ![Example run of Informed RRT*](doc/example.gif)
 
-Simple python script to test and visualize different versions [Rapid Random Trees (RRT)](https://en.wikipedia.org/wiki/Rapidly_exploring_random_tree):
+Simple python scripts to test and visualize different sampling based planning algorithms.
+
+Rapid Random Trees Variants (RRT)](https://en.wikipedia.org/wiki/Rapidly_exploring_random_tree.
  - RRT
  - RRT-March
  - RRT*
  - Informed RRT*
+
+ Other Sampling Planners
+ - BIT* (Batch Informed Tree)
+
 
 # Usage
 
@@ -210,3 +216,81 @@ After 200 iterations, the samples are more spread out and the path to goal cost 
   Goal path length: 0.6537540129442878
   Paused at 200 close figure to continue...
 ```
+
+
+## BIT* (Batch Informed Tree)
+BIT* is very different algorithm than RRT.  Instead of randomly picking one sample at a time, it picks a batch of samples.
+It then tries connecting samples from to form a tree.  It will expanding edges and samples using a heuristic that attempts 
+to makes more directed progress towards the goal.
+A batch is considered complete in two cases:
+ - Path to goal not found, no samples left to expand
+ - Path to goal is found, and there are no remaining samples that could possibly provide a better path to the goal.
+When a batch is complete, new samples are added.  If a path to goal exists, new samples are only in elipse region that could
+potentially produce a better path to the goal
+By adding new samples each bath, there is more coverage and a better chance to find a more optimal path to the goal.
+
+![Example run of BIT*](doc/bitstar.gif)
+
+### Vertex And Edge Queue
+To reduce amount of work done.  Not all vertexes or edges are considered at start of each batch.  
+Instead an ordered queue of vertexes are considered.   The virtexes are ordered based on the true cost of the tree path
+to the vertex and hueristic cost from the virtex to the goal.
+The vertex queues is expanded to have potential edges to other nearby vertexes or samples. 
+
+The virtex queue is exanded when the best hueristic cost on edge queue is worse than on best cost of the vertex queue.
+
+The edge queue is ordered based on a heuristic cost to reach the goal via that edge.  Edges from queue are expanded to 
+either unconnected samples or connected vertexes where resulting path length is smaller. 
+
+![Zoomed in edges around start node](doc/bit_star_itr1_zoomed.png)
+```
+./bit_star_cmp.py --seed 16 --fig-size 3 --pause 1
+```
+- The large green dots represent items on the virtex queue.  
+- The dashed green line represents unexpanded edges on the edge queue
+
+### K-Nearest
+The BIT* paper talks about connecting samples in radius around vertex to be expanded.
+This implementation only supports connecting the  K-nearest neighbors at a time.
+
+```
+./bit_star_cmp.py --seed 16 --fig-size 3 --pause 1 --k-nearest 10
+```
+![K-Nearest set to 10](doc/bit_star_10_nearest_zoomed.png)
+
+
+### Samples-per-Batch
+With each batch a certain number samples are added.  This value can be configured
+
+```
+./bit_star_cmp.py --seed 16 --fig-size 3 --pause 1 100 --samples-per-batch 10
+```
+![Only 10 samples per batch](doc/bit_star_10_sample_batch.png)
+
+The thick red line is a expanded edge that was in collision.
+
+### Pruning
+When a new batch is started, existing edges and vertexes that couldn't produce a shorter path to the goal will be pruned.
+```
+./bit_star_cmp.py --seed 16 --fig-size 3 --pause 82
+```
+
+![Pruning at start of new batch](doc/bit_star_prune.png)
+
+The pruned vertexes and edges are drawn in magenta.
+
+### Re-Wiring
+
+When an existing vertex is connected a new edge tha provides a shorter path to the start, it is effectively re-wired.
+The child vertexes have to have their distance from start values updated.
+
+```
+./bit_star_cmp.py --seed 16 --fig-size 3 --pause 58
+```
+
+![Re-wiring](doc/bit_star_rewire_zoomed.png)
+
+
+- Thick magenta line : previous edge that was replaced by re-wiring
+- Thick green line : new edge
+- Thick orange lines : children vertexes and edges that have costs reduced by re-wireing of ancestor

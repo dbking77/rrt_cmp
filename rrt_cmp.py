@@ -23,44 +23,14 @@
 # SOFTWARE.
 
 import argparse
-import collections
 import matplotlib.pyplot as plt
 from math import sqrt, pi, sin, cos
 import random
 import time
-from typing import List, NamedTuple, Optional
-
-Line = collections.namedtuple('Line', ['p1', 'p2'])
-Circle = collections.namedtuple('Circle', ['x', 'y', 'radius'])
-
-
-class Point(NamedTuple):
-    x: float
-    y: float
-
-    def dist(self, other: 'Point') -> float:
-        return sqrt((self.x - other.x)**2 + (self.y - other.y)**2)
-
-    def __sub__(self, other: 'Point') -> 'Point':
-        return Point(self.x - other.x, self.y - other.y)
-
-    def __add__(self, other: 'Point') -> 'Point':
-        return Point(self.x + other.x, self.y + other.y)
-
-    def __mul__(self, scale: float) -> 'Point':
-        return Point(self.x * scale, self.y * scale)
-
-
-def point_dist(p1: Point, p2: Point):
-    return sqrt((p1.x - p2.x)**2 + (p1.y - p2.y)**2)
-
-
-def is_point_in_collision(point: Point, obstacles: List[Circle]) -> bool:
-    for x, y, r in obstacles:
-        dsq = (x-point.x)**2 + (y-point.y)**2
-        if dsq < r**2:
-            return True
-    return False
+from typing import List, Optional
+from environment import (Point, Line, Circle, point_dist,
+                         is_point_in_collision, is_edge_in_collision,
+                         generate_obstacles, find_free_point)
 
 
 class Node:
@@ -137,30 +107,10 @@ class RRTCompare():
         self.point_collision_checks += 1
         return is_point_in_collision(point, self.obstacles)
 
-    def is_edge_in_collision(self, p1: Point, p2: Point):
+    def is_edge_in_collision(self, p1: Point, p2: Point) -> bool:
         self.edge_collision_checks += 1
-        dx, dy = (p2.x - p1.x, p2.y - p1.y)
-        d = sqrt(dx*dx + dy*dy)
-        if d == 0.0:
-            # pretend a zero length edge is in collision so it is not added
-            return True
-        c, s = (dx/d, dy/d)
-        for x, y, r in self.obstacles:
-            dx, dy = (x-p1.x, y-p1.y)
-            xr, yr = (c * dx + s * dy, s * dx - c * dy)
-            # don't check if points are in collision (they shouldn't be)
-            if xr < 0:
-                # circle is close to first pi
-                if xr*xr + yr*yr < r*r:
-                    return True
-            elif xr > d:
-                xr -= d
-                if xr*xr + yr*yr < r*r:
-                    return True
-            else:
-                if yr*yr < r*r:
-                    return True
-        return False
+        result = is_edge_in_collision(p1, p2, self.obstacles)
+        return result
 
     def sample_point(self):
         if self.march and self.march_point:
@@ -184,7 +134,7 @@ class RRTCompare():
             # pick a point that is inside elipse
             while True:
                 new_point = self.sample_point()
-                d = new_point.dist(self.goal) + new_point.dist(self.start)
+                d = new_point.calc_dist(self.goal) + new_point.calc_dist(self.start)
                 if d <= self.goal_node.dist:
                     break
         else:
@@ -449,20 +399,9 @@ def main():
 
     random.seed(args.seed)
 
-    obstacles: List[Circle] = []
-    for _ in range(args.obstacle_count):
-        obstacles.append(Circle(random.random(),
-                                random.random(),
-                                random.uniform(0.05, 0.1)))
-
-    def find_free_point():
-        while True:
-            point = Point(random.random(), random.random())
-            if not is_point_in_collision(point, obstacles):
-                return point
-
-    start = find_free_point()
-    goal = find_free_point()
+    obstacles = generate_obstacles(args.obstacle_count)
+    start = find_free_point(obstacles)
+    goal = find_free_point(obstacles)
 
     rrt = RRTCompare(
         obstacles,
@@ -488,7 +427,7 @@ def main():
         rrt.plan_some(args.skip, pause_iteration, args.pause_at_goal)
         rrt.draw()
         if (rrt.iteration == pause_iteration) or args.single_step:
-            print(f"  Paused at {pause_iteration} close figure to continue...")
+            print(f"  Paused at {rrt.iteration} close figure to continue...")
             plt.ioff()
         elif args.pause_at_goal and (rrt.goal_iteration == rrt.iteration):
             print("  Paused after first reaching goal, close figure to continue...")
